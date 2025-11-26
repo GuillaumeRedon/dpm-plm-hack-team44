@@ -43,7 +43,7 @@ function App() {
   return (
     <div className="app">
       <div className="header">
-        <h1>🔄 Process Mining App</h1>
+        <h1>Process Mining App</h1>
       </div>
       <div className="main-content">
         <AnalysisPanel analysis={analysis} />
