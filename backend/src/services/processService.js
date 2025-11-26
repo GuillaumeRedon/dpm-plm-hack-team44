@@ -183,7 +183,7 @@ async function getAnalysis() {
     plm.forEach(part => {
       if (part['Criticité'] === 'Critique') {
         const leadTime = part['Délai Approvisionnement'];
-        if (leadTime && leadTime.includes('20') || leadTime && leadTime.includes('25')) {
+        if (leadTime && (leadTime.includes('20') || leadTime.includes('25'))) {
           analysis.bottlenecks.push({
             system: 'PLM',
             activity: 'Supply Chain',

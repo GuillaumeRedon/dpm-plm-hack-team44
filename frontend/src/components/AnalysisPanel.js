@@ -1,17 +1,23 @@
 import React from 'react';
 
+// Keys to display for each system's statistics (primitive values only)
+const DISPLAY_STATS = {
+  ERP: ['totalEmployees', 'avgHourlyCost', 'avgAge'],
+  MES: ['totalOperations', 'totalDelayMinutes', 'avgDelayMinutes'],
+  PLM: ['totalParts', 'totalPartsCost', 'avgPartCost', 'criticalParts']
+};
+
 function AnalysisPanel({ analysis }) {
   if (!analysis) {
     return <div className="loading">Loading analysis...</div>;
   }
 
-  const renderStatValue = (key, value) => {
-    if (typeof value === 'object') {
-      return Object.entries(value).map(([k, v]) => (
-        <div key={k} style={{ fontSize: '11px' }}>{k}: {v}</div>
-      ));
-    }
-    return value;
+  // Get displayable stats for a system (only primitive values)
+  const getDisplayableStats = (system, stats) => {
+    const keysToShow = DISPLAY_STATS[system] || Object.keys(stats);
+    return keysToShow
+      .filter(key => stats[key] !== undefined && typeof stats[key] !== 'object')
+      .map(key => ({ key, value: stats[key] }));
   };
 
   return (
@@ -25,13 +31,11 @@ function AnalysisPanel({ analysis }) {
               {system}
             </div>
             <div className="stats-grid">
-              {Object.entries(stats).slice(0, 4).map(([key, value]) => (
-                typeof value !== 'object' && (
-                  <div key={key} className="stat-item">
-                    <div className="stat-value">{value}</div>
-                    <div className="stat-label">{key.replace(/([A-Z])/g, ' $1').trim()}</div>
-                  </div>
-                )
+              {getDisplayableStats(system, stats).map(({ key, value }) => (
+                <div key={key} className="stat-item">
+                  <div className="stat-value">{value}</div>
+                  <div className="stat-label">{key.replace(/([A-Z])/g, ' $1').trim()}</div>
+                </div>
               ))}
             </div>
           </div>
