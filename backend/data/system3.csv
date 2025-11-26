@@ -1,0 +1,18 @@
+case_id,activity,timestamp,duration,resource
+3001,Ticket Created,2024-01-15 06:00:00,1,System3
+3001,Assignment,2024-01-15 06:15:00,5,System3
+3001,Investigation,2024-01-15 06:30:00,30,System3
+3001,Resolution,2024-01-15 10:00:00,15,System3
+3001,Closure,2024-01-15 11:00:00,2,System3
+3002,Ticket Created,2024-01-15 07:00:00,1,System3
+3002,Assignment,2024-01-15 07:15:00,8,System3
+3002,Investigation,2024-01-15 08:00:00,45,System3
+3002,Assignment,2024-01-15 12:00:00,5,System3
+3002,Investigation,2024-01-15 13:00:00,25,System3
+3002,Resolution,2024-01-15 16:00:00,20,System3
+3002,Closure,2024-01-15 17:00:00,3,System3
+3003,Ticket Created,2024-01-16 08:00:00,2,System3
+3003,Assignment,2024-01-16 08:15:00,4,System3
+3003,Investigation,2024-01-16 08:30:00,20,System3
+3003,Resolution,2024-01-16 10:00:00,10,System3
+3003,Closure,2024-01-16 11:00:00,2,System3
