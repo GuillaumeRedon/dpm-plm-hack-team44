@@ -1,30 +1,33 @@
 # Process Mining Application
 
-A simple process mining application template that analyzes CSV data from multiple systems to identify bottlenecks, inefficiencies, and improvement opportunities.
+A process mining application template that analyzes data from multiple manufacturing systems (ERP, MES, PLM) to identify bottlenecks, inefficiencies, and improvement opportunities in aircraft assembly processes.
 
 ## Features
 
-- **Multi-system data analysis**: Processes CSV files from 3 different systems
-- **Bottleneck detection**: Identifies activities with unusually high durations
-- **Inefficiency analysis**: Detects repeated activities within the same case
-- **Improvement suggestions**: Provides recommendations based on process patterns
-- **Visual process flow**: Interactive ReactFlow visualization of process flows
+- **Multi-system data analysis**: Processes Excel files from 3 different systems:
+  - **ERP**: Workforce management data (employees, qualifications, costs)
+  - **MES**: Manufacturing execution data (operations, timing, issues)
+  - **PLM**: Product lifecycle data (parts, suppliers, criticality)
+- **Bottleneck detection**: Identifies critical parts with long lead times and delayed operations
+- **Inefficiency analysis**: Detects high-cost items and labor inefficiencies
+- **Improvement suggestions**: Provides recommendations based on data patterns
+- **Visual process flow**: Interactive ReactFlow visualization showing system relationships
 - **Statistics dashboard**: Shows key metrics for each system
 
 ## Project Structure
 
 ```
+├── data/                   # Excel data files (ERP, MES, PLM)
 ├── backend/
-│   ├── data/               # CSV data files (3 systems)
 │   ├── src/
 │   │   ├── index.js        # Express server entry point
 │   │   ├── routes/         # API routes
-│   │   └── services/       # Business logic
+│   │   └── services/       # Business logic (Excel parsing, analysis)
 │   └── package.json
 ├── frontend/
 │   ├── public/
 │   ├── src/
-│   │   ├── components/     # React components
+│   │   ├── components/     # React components (ProcessFlow, AnalysisPanel)
 │   │   ├── services/       # API client
 │   │   ├── App.js          # Main application
 │   │   └── index.js        # Entry point
@@ -71,22 +74,26 @@ The frontend will run on http://localhost:3000
 
 ## API Endpoints
 
-- `GET /api/processes` - Returns all process data from CSV files
+- `GET /api/processes` - Returns all process data from Excel files
 - `GET /api/analysis` - Returns analysis results (bottlenecks, inefficiencies, improvements)
 - `GET /api/flow` - Returns flow data formatted for ReactFlow visualization
 - `GET /health` - Health check endpoint
 
-## CSV Data Format
+## Data Files
 
-Each CSV file should have the following columns:
-- `case_id` - Unique identifier for the process case
-- `activity` - Name of the activity
-- `timestamp` - When the activity occurred
-- `duration` - Duration of the activity (in time units)
-- `resource` - System or resource handling the activity
+The application expects the following Excel files in the `data/` directory:
+
+1. **ERP_Equipes Airplus.xlsx** - Employee data with columns:
+   - Matricule, Prénom, Nom, Âge, Qualification, Poste de montage, etc.
+
+2. **MES_Extraction.xlsx** - Manufacturing operations with columns:
+   - Poste, Nom, Temps Prévu, Temps Réel, Aléas Industriels, etc.
+
+3. **PLM_DataSet.xlsx** - Parts data with columns:
+   - Code/Référence, Désignation, Fournisseur, Délai Approvisionnement, Criticité, etc.
 
 ## Technologies Used
 
-- **Backend**: Node.js, Express, csv-parser
+- **Backend**: Node.js, Express, xlsx (for Excel parsing)
 - **Frontend**: React, ReactFlow
 - **Styling**: CSS
