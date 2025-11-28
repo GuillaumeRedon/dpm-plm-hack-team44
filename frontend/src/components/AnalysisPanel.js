@@ -27,7 +27,7 @@ function AnalysisPanel({ analysis }) {
         <h2>📊 Statistics</h2>
         {Object.entries(analysis.statistics || {}).map(([system, stats]) => (
           <div key={system} style={{ marginBottom: '15px' }}>
-            <div style={{ fontWeight: 600, marginBottom: '8px', color: 'var(--strong-blue)' }}>
+            <div style={{ fontWeight: 600, marginBottom: '8px', color: '#1E3A8A' }}>
               {system}
             </div>
             <div className="stats-grid">

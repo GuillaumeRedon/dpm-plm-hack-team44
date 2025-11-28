@@ -1,99 +1,220 @@
-# Process Mining Application
+# RONDO - Process Mining Application
 
-A process mining application template that analyzes data from multiple manufacturing systems (ERP, MES, PLM) to identify bottlenecks, inefficiencies, and improvement opportunities in aircraft assembly processes.
+Application d'analyse de processus de fabrication qui exploite les données de plusieurs systèmes (ERP, MES, PLM) pour identifier les goulots d'étranglement, les inefficacités et les opportunités d'amélioration dans les processus d'assemblage aéronautique.
 
-## Features
+## Fonctionnalités
 
-- **Multi-system data analysis**: Processes Excel files from 3 different systems:
-  - **ERP**: Workforce management data (employees, qualifications, costs)
-  - **MES**: Manufacturing execution data (operations, timing, issues)
-  - **PLM**: Product lifecycle data (parts, suppliers, criticality)
-- **Bottleneck detection**: Identifies critical parts with long lead times and delayed operations
-- **Inefficiency analysis**: Detects high-cost items and labor inefficiencies
-- **Improvement suggestions**: Provides recommendations based on data patterns
-- **Visual process flow**: Interactive ReactFlow visualization showing system relationships
-- **Statistics dashboard**: Shows key metrics for each system
+### 📅 Timeline
+- **Visualisation temporelle interactive**: Affichage des opérations sur un axe temporel (6h-20h)
+- **Filtre par date**: Sélection de dates spécifiques pour analyser les opérations
+- **Détails des tâches**: Information complète sur chaque opération (poste, pièces, durée, retards)
+- **Détection de retards**: Identification visuelle des opérations en retard
 
-## Project Structure
+### 📊 Dashboard
+- **KPIs en temps réel**: Métriques clés de performance (criticité, coûts, délais)
+- **Graphiques avancés**: Visualisations Plotly interactives
+  - Analyse de criticité des pièces
+  - Répartition des coûts par système
+  - Lead times et fournisseurs
+  - Analyse des retards
+- **Analyse multi-systèmes**: Intégration des données ERP, MES, PLM
+
+### 🤖 IA Analysis
+- **Analyse intelligente par Gemini AI**: Insights générés automatiquement
+- **Recommandations stratégiques**: Suggestions d'amélioration basées sur les données
+- **Détection de patterns**: Identification des tendances et anomalies
+
+### 👥 Employees (caché en production)
+- **Analytics RH**: Statistiques détaillées par employé
+- **Performance tracking**: Suivi des tâches, temps et retards
+- **Graphiques de distribution**: Expérience, charge de travail, taux de retard
+
+## Architecture du projet
 
 ```
-├── data/                   # Excel data files (ERP, MES, PLM)
-├── backend/
-│   ├── src/
-│   │   ├── index.js        # Express server entry point
-│   │   ├── routes/         # API routes
-│   │   └── services/       # Business logic (Excel parsing, analysis)
-│   └── package.json
-├── frontend/
+dpm-plm-hack-team44/
+├── data/                          # Fichiers Excel sources (ERP, MES, PLM)
+├── backend/                       # Backend Python/Flask
+│   ├── app.py                     # Point d'entrée Flask
+│   ├── requirements.txt           # Dépendances Python
+│   ├── .env                       # Configuration (API Gemini)
+│   ├── routes/
+│   │   └── process_routes.py     # Routes API
+│   └── services/
+│       └── process_service.py    # Logique métier et analyse
+├── frontend/                      # Frontend React
 │   ├── public/
+│   │   ├── index.html
+│   │   └── logo_rondo.png        # Logo RONDO
 │   ├── src/
-│   │   ├── components/     # React components (ProcessFlow, AnalysisPanel)
-│   │   ├── services/       # API client
-│   │   ├── App.js          # Main application
-│   │   └── index.js        # Entry point
+│   │   ├── App.js                # Application principale
+│   │   ├── index.css             # Styles globaux (thème bleu)
+│   │   ├── components/
+│   │   │   ├── ProcessFlow.js    # Timeline ReactFlow
+│   │   │   ├── Dashboard.js      # Tableau de bord
+│   │   │   ├── AIAnalysis.js     # Analyse IA
+│   │   │   ├── AnalysisPanel.js  # Panneau latéral
+│   │   │   ├── AdvancedCharts.js # Graphiques avancés
+│   │   │   └── Employees.js      # Page employés (cachée)
+│   │   └── services/
+│   │       └── api.js            # Client API
 │   └── package.json
 └── README.md
 ```
 
-## Getting Started
+## Démarrage rapide
 
-### Prerequisites
+### Prérequis
 
-- Node.js (v16 or higher)
-- npm
+- **Python 3.9+** (pour le backend)
+- **Node.js 16+** (pour le frontend)
+- **Clé API Google Gemini** (pour l'analyse IA)
 
 ### Installation
 
-1. Install backend dependencies:
+#### 1. Backend Python
+
 ```bash
 cd backend
-npm install
+
+# Créer un environnement virtuel (optionnel mais recommandé)
+python -m venv .venv
+.venv\Scripts\activate  # Windows
+source .venv/bin/activate  # macOS/Linux
+
+# Installer les dépendances
+pip install -r requirements.txt
+
+# Configurer l'API Gemini
+# Créer un fichier .env avec:
+GEMINI_API_KEY=votre_cle_api_ici
 ```
 
-2. Install frontend dependencies:
+#### 2. Frontend React
+
 ```bash
 cd frontend
 npm install
 ```
 
-### Running the Application
+### Lancement de l'application
 
-1. Start the backend server:
+#### 1. Démarrer le backend
+
 ```bash
 cd backend
-npm start
+python app.py
 ```
-The server will run on http://localhost:3001
+Le serveur démarre sur **http://localhost:3001**
 
-2. In a new terminal, start the frontend:
+#### 2. Démarrer le frontend (nouveau terminal)
+
 ```bash
 cd frontend
 npm start
 ```
-The frontend will run on http://localhost:3000
+Le frontend démarre sur **http://localhost:3000**
 
 ## API Endpoints
 
-- `GET /api/processes` - Returns all process data from Excel files
-- `GET /api/analysis` - Returns analysis results (bottlenecks, inefficiencies, improvements)
-- `GET /api/flow` - Returns flow data formatted for ReactFlow visualization
-- `GET /health` - Health check endpoint
+### Routes principales
 
-## Data Files
+| Endpoint | Méthode | Description |
+|----------|---------|-------------|
+| `/health` | GET | Health check du serveur |
+| `/api/analysis` | GET | Analyse des goulots d'étranglement et inefficacités |
+| `/api/flow` | GET | Données pour la timeline ReactFlow |
+| `/api/flow?date=YYYY-MM-DD` | GET | Timeline filtrée par date |
+| `/api/charts` | GET | Données pour les graphiques du dashboard |
+| `/api/ai-analysis` | GET | Analyse générée par Gemini AI |
+| `/api/processes` | GET | Données brutes de tous les processus |
+| `/api/employees` | GET | Statistiques des employés |
 
-The application expects the following Excel files in the `data/` directory:
+### Formats de réponse
 
-1. **ERP_Equipes Airplus.xlsx** - Employee data with columns:
-   - Matricule, Prénom, Nom, Âge, Qualification, Poste de montage, etc.
+#### `/api/flow`
+```json
+{
+  "nodes": [...],  // Nœuds ReactFlow avec positions temporelles
+  "edges": [...],  // Connexions entre nœuds
+  "availableDates": ["2024-01-15", "2024-01-16", ...]
+}
+```
 
-2. **MES_Extraction.xlsx** - Manufacturing operations with columns:
-   - Poste, Nom, Temps Prévu, Temps Réel, Aléas Industriels, etc.
+#### `/api/analysis`
+```json
+{
+  "bottlenecks": [{
+    "system": "PLM",
+    "item": "Nom de la pièce",
+    "reason": "Long délai d'approvisionnement"
+  }],
+  "inefficiencies": [...],
+  "improvements": [...]
+}
+```
 
-3. **PLM_DataSet.xlsx** - Parts data with columns:
-   - Code/Référence, Désignation, Fournisseur, Délai Approvisionnement, Criticité, etc.
+## Fichiers de données
 
-## Technologies Used
+L'application nécessite 3 fichiers Excel dans le répertoire `data/`:
 
-- **Backend**: Node.js, Express, xlsx (for Excel parsing)
-- **Frontend**: React, ReactFlow
-- **Styling**: CSS
+### 1. **ERP_Equipes Airplus.xlsx** - Données RH
+Colonnes requises:
+- `ID`, `Matricule`, `Prénom`, `Nom`, `Âge`
+- `Niveau d'expérience`, `Qualification`, `Coût horaire`
+- `Poste de montage`, `Statut`
+
+### 2. **MES_Extraction.xlsx** - Données de production
+Colonnes requises:
+- `Poste`, `Nom`, `Nombre pièces`, `Référence`
+- `Temps Prévu`, `Temps Réel`, `Date`
+- `Heure Début`, `Heure Fin`
+- `Aléas Industriels`, `Cause Potentielle`
+
+### 3. **PLM_DataSet.xlsx** - Données produits
+Colonnes requises:
+- `Code/Référence`, `Désignation`
+- `Fournisseur`, `Délai Approvisionnement`
+- `Criticité`, `Coût Unitaire`
+
+## Technologies utilisées
+
+### Backend
+- **Flask 3.0.0** - Framework web Python
+- **Pandas 2.1.4** - Manipulation de données Excel
+- **Google Generative AI** - Analyse IA avec Gemini
+- **Flask-CORS** - Gestion des CORS
+
+### Frontend
+- **React 18.2.0** - Framework UI
+- **ReactFlow** - Visualisation de timeline interactive
+- **Plotly.js** - Graphiques interactifs avancés
+
+### Style
+- **Palette bleue professionnelle**:
+  - Primary: `#1E3A8A` (dark blue)
+  - Accent: `#2563EB`, `#3B82F6`, `#60A5FA`
+  - Light: `#93C5FD`, `#DBEAFE`
+
+## Optimisations
+
+- ✅ **Appel API unique**: Un seul appel Gemini au chargement (économie de tokens)
+- ✅ **Préselection de date**: Première date automatiquement sélectionnée
+- ✅ **Axe temporel**: Échelle horaire 6h-20h avec graduations
+- ✅ **Fusion ERP/MES**: Statistiques employés basées sur données croisées
+- ✅ **UI responsive**: Layout adaptatif pour tous les écrans
+
+## Notes de développement
+
+### Page Employees cachée
+La page `Employees` est développée mais cachée en production. Pour la réactiver:
+1. Ouvrir `frontend/src/App.js`
+2. Décommenter les lignes ~116-130 (bouton Employés)
+3. Recharger l'application
+
+### Configuration Gemini
+Le backend nécessite une clé API Gemini dans `.env`:
+```
+GEMINI_API_KEY=votre_cle_ici
+```
+Obtenir une clé sur: https://makersuite.google.com/app/apikey

@@ -1,6 +1,12 @@
-import os
 import pandas as pd
+import numpy as np
 from pathlib import Path
+import base64
+from io import BytesIO
+import matplotlib
+matplotlib.use('Agg')  # Backend non-GUI
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 class ProcessService:
     def __init__(self):
@@ -21,48 +27,20 @@ class ProcessService:
             if df[col].dtype == 'datetime64[ns]':
                 df[col] = df[col].astype(str)
             elif df[col].dtype == 'object':
-                # Convertir les objets time et autres types non-sérialisables
                 df[col] = df[col].apply(lambda x: str(x) if pd.notna(x) and not isinstance(x, (int, float, str, bool)) else x)
         return df.to_dict('records')
     
-    # def _time_to_minutes(self, time_str):
-    #     """Convertit une chaîne de temps (HH:MM:SS) en minutes"""
-    #     if not time_str or pd.isna(time_str):
-    #         return 0
-    #     try:
-    #         parts = str(time_str).split(':')
-    #         if len(parts) == 3:
-    #             hours, minutes, seconds = map(int, parts)
-    #             return hours * 60 + minutes + seconds / 60
-    #     except:
-    #         pass
-    #     return 0
-    
     def _time_to_minutes(self, time_str):
-        """Convertit une chaîne de temps (HH:MM:SS) en minutes"""
+        """Convertit une chaîne de temps (HH:MM:SS) en minutes pour le positionnement sur la timeline"""
         if not time_str or pd.isna(time_str):
             return 0
         try:
             parts = str(time_str).split(':')
             if len(parts) == 3:
                 hours, minutes, seconds = map(int, parts)
-                return round(hours * 60 + minutes + seconds / 60)*15
+                return round((hours * 60 + minutes + seconds / 60) * 15)
         except:
-            pass
-        return 0
-    
-    def time_to_seconds(self, time_str):
-        """Convertit une chaîne de temps (HH:MM:SS) en secondes"""
-        if not time_str or pd.isna(time_str):
             return 0
-        try:
-            parts = str(time_str).split(':')
-            if len(parts) == 3:
-                hours, minutes, seconds = map(int, parts)
-                return round((hours * 3600 + minutes * 60 + seconds)/10)
-        except:
-            pass
-        return 0
     
     def get_all_processes(self):
         """Charge tous les fichiers Excel du répertoire data"""
@@ -134,8 +112,8 @@ class ProcessService:
             # Calculer les délais
             time_delays = []
             for r in mes:
-                planned = self.time_to_seconds(r.get('Temps Prévu'))
-                actual = self.time_to_seconds(r.get('Temps Réel'))
+                planned = self._time_to_minutes(r.get('Temps Prévu')) / 15  # Convertir en minutes réelles
+                actual = self._time_to_minutes(r.get('Temps Réel')) / 15
                 delay = actual - planned
                 time_delays.append({
                     **r,
@@ -147,11 +125,26 @@ class ProcessService:
             total_delay = sum(max(0, r['delay']) for r in time_delays)
             avg_delay = total_delay / len(mes) if mes else 0
             
+            # Calculer les coûts par activité (colonne Nom)
+            cost_by_activity = {}
+            for r in time_delays:
+                activity = r.get('Nom', 'Unknown')
+                # Estimer le coût: temps réel * coût horaire moyen (estimation à 35€/h)
+                cost = r['actual'] / 60 * 35  # Convertir minutes en heures et multiplier par tarif
+                if activity in cost_by_activity:
+                    cost_by_activity[activity] += cost
+                else:
+                    cost_by_activity[activity] = cost
+            
+            # Garder les top 10 activités les plus coûteuses
+            top_activities = sorted(cost_by_activity.items(), key=lambda x: x[1], reverse=True)[:10]
+            
             analysis['statistics']['MES'] = {
                 'totalOperations': len(mes),
                 'totalDelayMinutes': round(total_delay, 1),
                 'avgDelayMinutes': round(avg_delay, 1),
-                'issuesByType': {}
+                'issuesByType': {},
+                'costByActivity': {name: round(cost, 2) for name, cost in top_activities}
             }
             
             # Compter les problèmes par type
@@ -248,16 +241,34 @@ class ProcessService:
         
         return analysis
     
-    def get_flow_data(self):
+    def get_flow_data(self, date_filter=None):
         """Génère une timeline des tâches du projet basée sur l'enchaînement temporel"""
         all_data = self.get_all_processes()
         nodes = []
         edges = []
         
         if 'MES' not in all_data:
-            return {'nodes': nodes, 'edges': edges}
+            return {'nodes': nodes, 'edges': edges, 'availableDates': []}
         
         mes = all_data['MES']
+        
+        # Extraire toutes les dates disponibles
+        available_dates = set()
+        for op in mes:
+            date_str = str(op.get('Date', ''))
+            if ' ' in date_str:
+                date_str = date_str.split()[0]
+            if date_str and date_str != 'nan':
+                available_dates.add(date_str)
+        
+        available_dates = sorted(list(available_dates))
+        
+        # Filtrer par date si spécifié
+        if date_filter:
+            mes = [op for op in mes if str(op.get('Date', '')).startswith(date_filter)]
+        
+        if not mes:
+            return {'nodes': nodes, 'edges': edges, 'availableDates': available_dates}
         
         # Fonction pour parser date et heure en datetime pour un tri correct
         def get_datetime(op):
@@ -289,7 +300,7 @@ class ProcessService:
             task_groups[task_name].append(op)
         
         # Configuration de l'affichage
-        x_start = 8*900 - 250 # Commencer à 8 heures (en minutes) + padding
+        x_start = 8 * 900 - 250  # Position de départ
         y_spacing = 100
         
         # Créer un en-tête
@@ -312,6 +323,9 @@ class ProcessService:
         
         # Créer les nœuds pour chaque groupe de tâches
         y_position = 100
+        
+        # Garder trace de tous les nœuds avec leur timestamp pour les connexions temporelles
+        all_task_nodes = []
         
         for task_name in task_order:
             operations = task_groups[task_name]
@@ -350,24 +364,32 @@ class ProcessService:
 
                 node_id = f'task-{task_name.replace(" ", "-")}-{idx}'
                 
-                # Calculer la largeur du nœud basée sur la durée
+                # Calculer la largeur du nœud basée sur la durée réelle
                 duration_minutes = self._time_to_minutes(temps_reel)
-                node_width = max(100, int(duration_minutes))  # Min 100px, 3px par minute
+                node_width = max(50, int(duration_minutes))
+                
+                # Calculer le pourcentage du temps prévu par rapport au temps réel
+                planned_minutes = self._time_to_minutes(temps_prevu)
+                if duration_minutes > 0:
+                    planned_percentage = (planned_minutes / duration_minutes) * 100
+                else:
+                    planned_percentage = 100
                 
                 # Créer le nœud
                 nodes.append({
                     'id': node_id,
                     'type': 'custom',  # Type personnalisé pour appliquer les styles
                     'data': {
-                        'label': f'#{idx + 1}',
+                        'label': f'{task_name} #{idx + 1}',
                         'poste': f'Poste {poste}',
-                        'pieces': f'📦 {nb_pieces}',
+                        'pieces': f'Pièces: {nb_pieces}',
                         'duration': f'⏱️ {temps_reel}',
                         'time': f"{str(op.get('Heure Début', ''))} - {str(op.get('Heure Fin', ''))}",
                         'date': str(op.get('Date', '')).split()[0] if op.get('Date') else '',
                         'delay': f'⚠️ {has_delay}' if has_delay else '✓',
                         'hasDelay': bool(has_delay),  # Pour le style conditionnel
-                        'width': node_width  # Largeur dynamique
+                        'width': node_width,  # Largeur dynamique
+                        'plannedPercentage': min(100, planned_percentage)  # Pourcentage du temps prévu vs réel
                     },
                     'position': {
                         'x': self._time_to_minutes(start_time),
@@ -379,22 +401,399 @@ class ProcessService:
                     }
                 })
                 
-                # Connecter avec le nœud précédent dans cette ligne
-                if prev_node_id:
-                    edges.append({
-                        'id': f'edge-{prev_node_id}-{node_id}',
-                        'source': prev_node_id,
-                        'target': node_id,
-                        'animated': bool(has_delay),
-                        'style': {
-                            'stroke': '#ff6b6b' if has_delay else '#4dabf7',
-                            'strokeWidth': 2
-                        }
-                    })
+                # Sauvegarder les infos pour les connexions temporelles
+                all_task_nodes.append({
+                    'id': node_id,
+                    'datetime': get_datetime(op),
+                    'has_delay': bool(has_delay)
+                })
                 
                 prev_node_id = node_id
             
             # Passer à la ligne suivante
             y_position += y_spacing
         
-        return {'nodes': nodes, 'edges': edges}
+        # Créer les connexions temporelles entre tous les nœuds
+        sorted_task_nodes = sorted(all_task_nodes, key=lambda x: x['datetime'])
+        for i in range(len(sorted_task_nodes) - 1):
+            current_node = sorted_task_nodes[i]
+            next_node = sorted_task_nodes[i + 1]
+            
+            # Créer une connexion temporelle
+            edges.append({
+                'id': f'edge-time-{i}',
+                'source': current_node['id'],
+                'target': next_node['id'],
+                'animated': current_node['has_delay'] or next_node['has_delay'],
+                'style': {
+                    'stroke': '#4dabf7',
+                    'strokeWidth': 2
+                }
+            })
+        
+        return {'nodes': nodes, 'edges': edges, 'availableDates': available_dates}
+    
+    def _time_to_hours(self, time_str):
+        """Convertit HH:MM:SS en heures décimales"""
+        if pd.isna(time_str) or str(time_str).lower() == 'nan':
+            return 0.0
+        try:
+            parts = str(time_str).strip().split(':')
+            if len(parts) == 3:
+                h, m, s = map(int, parts)
+                return h + m/60 + s/3600
+            return 0.0
+        except:
+            return 0.0
+    
+    def _plot_to_base64(self, fig):
+        """Convertit une figure matplotlib en string base64"""
+        buffer = BytesIO()
+        fig.savefig(buffer, format='png', bbox_inches='tight', dpi=100)
+        buffer.seek(0)
+        image_base64 = base64.b64encode(buffer.read()).decode('utf-8')
+        plt.close(fig)
+        return image_base64
+    
+    def get_advanced_charts(self):
+        """Génère les données pour les 3 graphiques avancés (format JSON pour Plotly)"""
+        charts = {}
+        
+        # Charger les données
+        df_mes_path = self.data_dir / 'MES_Extraction.xlsx'
+        df_plm_path = self.data_dir / 'PLM_DataSet.xlsx'
+        df_erp_path = self.data_dir / 'ERP_Equipes Airplus.xlsx'
+        
+        df_mes = pd.read_excel(df_mes_path, sheet_name='MES')
+        df_plm = pd.read_excel(df_plm_path)
+        df_erp = pd.read_excel(df_erp_path, sheet_name='RESSOURCES')
+        
+        # Nettoyage MES
+        df_mes['Poste'] = pd.to_numeric(df_mes['Poste'], errors='coerce').fillna(0).astype(int)
+        df_mes['Temps_Prévu_H'] = df_mes['Temps Prévu'].apply(self._time_to_hours)
+        df_mes['Temps_Réel_H'] = df_mes['Temps Réel'].apply(self._time_to_hours)
+        df_mes['Retard_H'] = df_mes['Temps_Réel_H'] - df_mes['Temps_Prévu_H']
+        
+        # Nettoyage ERP
+        df_erp = df_erp.dropna(subset=['Poste de montage'])
+        df_erp['Poste_Num'] = df_erp['Poste de montage'].astype(str).str.extract(r'(\d+)').astype(float)
+        
+        # ==========================================
+        # GRAPHIQUE 1 : VARIABILITÉ & GOULOTS (BOXPLOT)
+        # ==========================================
+        top_postes = df_mes.groupby('Poste')['Retard_H'].mean().sort_values(ascending=False).head(10).index.tolist()
+        df_filtered = df_mes[df_mes['Poste'].isin(top_postes)]
+        
+        # Préparer les données pour boxplot Plotly
+        boxplot_data = []
+        for poste in sorted(top_postes):
+            poste_data = df_filtered[df_filtered['Poste'] == poste]['Retard_H'].tolist()
+            boxplot_data.append({
+                'poste': str(poste),
+                'values': poste_data
+            })
+        
+        charts['bottleneck_variability'] = {
+            'type': 'boxplot',
+            'data': boxplot_data
+        }
+        
+        # ==========================================
+        # GRAPHIQUE 2 : CORRÉLATION CONCEPTION (PLM)
+        # ==========================================
+        df_mes_exploded = df_mes.copy()
+        df_mes_exploded['Ref_List'] = df_mes_exploded['Référence'].astype(str).str.split(';')
+        df_mes_exploded = df_mes_exploded.explode('Ref_List')
+        df_mes_exploded['Ref_List'] = df_mes_exploded['Ref_List'].str.strip()
+        
+        df_plm_merged = df_mes_exploded.merge(df_plm, left_on='Ref_List', right_on='Code / Référence', how='inner')
+        
+        if len(df_plm_merged) > 0:
+            # Limiter à 150 points pour performance
+            sample_size = min(150, len(df_plm_merged))
+            df_sample = df_plm_merged.sample(n=sample_size, random_state=42)
+            
+            scatter_data = []
+            for _, row in df_sample.iterrows():
+                scatter_data.append({
+                    'caoTime': float(row['Temps CAO (h)']),
+                    'assemblyTime': float(row['Temps_Réel_H']),
+                    'criticality': str(row['Criticité']),
+                    'mass': float(row['Masse (kg)']),
+                    'reference': str(row['Code / Référence'])
+                })
+            
+            charts['plm_correlation'] = {
+                'type': 'scatter',
+                'data': scatter_data
+            }
+        
+        # ==========================================
+        # GRAPHIQUE 3 : PERFORMANCE RH (ERP)
+        # ==========================================
+        df_rh_merged = df_mes.merge(df_erp, left_on='Poste', right_on='Poste_Num', how='inner')
+        df_rh_merged['Retard_H'] = df_rh_merged['Retard_H'].fillna(0)
+        
+        if len(df_rh_merged) > 0:
+            rh_performance = df_rh_merged.groupby('Niveau d\'expérience')['Retard_H'].sum().to_dict()
+            
+            bar_data = []
+            for level, total_delay in rh_performance.items():
+                bar_data.append({
+                    'level': str(level),
+                    'totalDelay': float(total_delay)
+                })
+            
+            charts['rh_performance'] = {
+                'type': 'bar',
+                'data': bar_data
+            }
+        
+        # ==========================================
+        # GRAPHIQUE 4 : RETARD TOTAL CUMULÉ PAR POSTE
+        # ==========================================
+        delay_by_poste = df_mes.groupby('Poste').agg(
+            Total_Delay_H=('Retard_H', 'sum')
+        ).reset_index()
+        delay_by_poste_top = delay_by_poste.sort_values(by='Total_Delay_H', ascending=False).head(10)
+        
+        charts['delay_by_poste'] = {
+            'type': 'bar',
+            'data': [
+                {
+                    'poste': int(row['Poste']),
+                    'totalDelay': float(row['Total_Delay_H'])
+                }
+                for _, row in delay_by_poste_top.iterrows()
+            ]
+        }
+        
+        # ==========================================
+        # GRAPHIQUE 5 : TEMPS VS EMPLOYÉS PAR ACTIVITÉ
+        # ==========================================
+        employees_per_poste = df_erp.groupby('Poste_Num').size().reset_index(name='Employee_Count')
+        unique_postes_per_nom = df_mes.groupby('Nom')['Poste'].unique()
+        nom_stats = []
+        
+        for nom, postes in unique_postes_per_nom.items():
+            total_time = df_mes[df_mes['Nom'] == nom]['Temps_Réel_H'].sum()
+            relevant_employees = employees_per_poste[employees_per_poste['Poste_Num'].isin(postes)]
+            total_employees = relevant_employees['Employee_Count'].sum()
+            nom_stats.append({
+                'nom': str(nom),
+                'totalTime': float(total_time),
+                'totalEmployees': int(total_employees)
+            })
+        
+        # Trier et limiter à 12
+        nom_stats = sorted(nom_stats, key=lambda x: x['totalTime'], reverse=True)[:12]
+        
+        charts['time_vs_employees'] = {
+            'type': 'bar',
+            'data': nom_stats
+        }
+        
+        # ==========================================
+        # GRAPHIQUE 6 : IMPACT FOURNISSEURS (RETARDS)
+        # ==========================================
+        df_mes_exploded2 = df_mes.copy()
+        df_mes_exploded2['Référence_List'] = df_mes_exploded2['Référence'].astype(str).str.split(';')
+        df_mes_exploded2 = df_mes_exploded2.explode('Référence_List')
+        df_mes_exploded2['Référence_List'] = df_mes_exploded2['Référence_List'].str.strip().str.strip('"')
+        
+        df_merged_supplier = df_mes_exploded2.merge(
+            df_plm[['Code / Référence', 'Fournisseur']],
+            left_on='Référence_List',
+            right_on='Code / Référence',
+            how='inner'
+        )
+        
+        supplier_delay = df_merged_supplier[df_merged_supplier['Retard_H'] > 0].groupby('Fournisseur')['Retard_H'].sum().reset_index()
+        supplier_delay = supplier_delay.sort_values(by='Retard_H', ascending=True).tail(12)
+        
+        charts['supplier_impact'] = {
+            'type': 'bar_horizontal',
+            'data': [
+                {
+                    'supplier': str(row['Fournisseur']),
+                    'delay': float(row['Retard_H'])
+                }
+                for _, row in supplier_delay.iterrows()
+            ]
+        }
+        
+        # ==========================================
+        # GRAPHIQUE 7 : IMPACT FINANCIER PAR FOURNISSEUR
+        # ==========================================
+        cost_per_poste = df_erp.groupby('Poste_Num')['Coût horaire (€)'].mean().reset_index()
+        
+        df_final_cost = df_merged_supplier.merge(
+            cost_per_poste,
+            left_on='Poste',
+            right_on='Poste_Num',
+            how='left'
+        )
+        
+        df_final_cost['Cout_Retard_Euro'] = df_final_cost['Retard_H'] * df_final_cost['Coût horaire (€)']
+        supplier_cost_impact = df_final_cost.groupby('Fournisseur')['Cout_Retard_Euro'].sum().reset_index()
+        supplier_cost_impact = supplier_cost_impact.sort_values(by='Cout_Retard_Euro', ascending=True).tail(12)
+        
+        charts['supplier_financial_impact'] = {
+            'type': 'bar_horizontal',
+            'data': [
+                {
+                    'supplier': str(row['Fournisseur']),
+                    'cost': float(row['Cout_Retard_Euro'])
+                }
+                for _, row in supplier_cost_impact.iterrows()
+            ]
+        }
+        
+        # ==========================================
+        # GRAPHIQUE 8 : MATRICE 4D (BUBBLE CHART)
+        # ==========================================
+        df_bubble = df_final_cost[df_final_cost['Retard_H'] > 0.08].copy()
+        df_plm_renamed = df_plm.rename(columns={'Code / Référence': 'Référence_List'})
+        df_bubble = df_bubble.merge(
+            df_plm_renamed[['Référence_List', 'Criticité']],
+            on='Référence_List',
+            how='left'
+        )
+        df_bubble['Criticité'] = df_bubble['Criticité'].fillna('Non Classé')
+        df_bubble['Cout_Retard'] = df_bubble['Retard_H'] * df_bubble['Coût horaire (€)']
+        
+        # Limiter à 100 points pour performance
+        if len(df_bubble) > 100:
+            df_bubble = df_bubble.sample(n=100, random_state=42)
+        
+        bubble_data = []
+        for _, row in df_bubble.iterrows():
+            bubble_data.append({
+                'poste': int(row['Poste']),
+                'delay': float(row['Retard_H']),
+                'cost': float(row['Cout_Retard']),
+                'criticality': str(row['Criticité']),
+                'name': str(row['Nom']),
+                'supplier': str(row['Fournisseur'])
+            })
+        
+        charts['risk_matrix'] = {
+            'type': 'bubble',
+            'data': bubble_data
+        }
+        
+        return charts
+    
+    def get_employees_data(self):
+        """Génère les statistiques par poste de travail à partir des données MES (pas d'info employé individuel)"""
+        all_data = self.get_all_processes()
+        
+        if 'MES' not in all_data or 'ERP' not in all_data:
+            return {'employees': [], 'totalEmployees': 0, 'avgTasksPerEmployee': 0, 'totalTasks': 0}
+        
+        mes = all_data['MES']
+        erp = all_data['ERP']
+        
+        # Créer un dictionnaire des employés depuis ERP
+        erp_employees = {}
+        for emp in erp:
+            emp_id = emp.get('ID') or emp.get('Employé') or emp.get('Matricule')
+            if emp_id:
+                erp_employees[emp_id] = {
+                    'id': emp_id,
+                    'name': f"{emp.get('Prénom', '')} {emp.get('Nom', '')}".strip() or f"Employé {emp_id}",
+                    'experience': emp.get("Niveau d'expérience", 'Inconnu'),
+                    'qualification': emp.get('Qualification', ''),
+                    'cost': emp.get('Coût horaire (€)', 0)
+                }
+        
+        # Analyser les tâches MES et les regrouper par poste
+        poste_stats = {}
+        task_list = []
+        
+        for task in mes:
+            poste = str(task.get('Poste', 'Inconnu'))
+            piece = str(task.get('Référence', task.get('Nom', '')))
+            temps = task.get('Temps Réel', '0:0:0')
+            delay = task.get('Aléas Industriels')
+            date = str(task.get('Date', ''))
+            heure_debut = str(task.get('Heure Début', ''))
+            nom_tache = str(task.get('Nom', ''))
+            
+            if poste not in poste_stats:
+                poste_stats[poste] = {
+                    'tasks': [],
+                    'totalTime': 0,
+                    'delays': 0,
+                    'tasksCount': 0,
+                    'pieces': set()
+                }
+            
+            stat = poste_stats[poste]
+            stat['tasksCount'] += 1
+            stat['pieces'].add(piece)
+            if delay:
+                stat['delays'] += 1
+            
+            # Convertir temps en minutes
+            if temps:
+                parts = str(temps).split(':')
+                if len(parts) == 3:
+                    try:
+                        hours = int(parts[0])
+                        minutes = int(parts[1])
+                        seconds = int(parts[2])
+                        total_minutes = hours * 60 + minutes + seconds / 60
+                        stat['totalTime'] += total_minutes
+                    except:
+                        pass
+            
+            stat['tasks'].append({
+                'nom': nom_tache,
+                'piece': piece,
+                'temps': str(temps),
+                'delay': str(delay) if delay else None,
+                'date': date,
+                'heure': heure_debut
+            })
+        
+        # Créer une liste d'employés fictifs basée sur les postes et ERP
+        employees = []
+        emp_counter = 1
+        
+        # Utiliser les vrais employés d'ERP
+        for emp_id, emp_data in erp_employees.items():
+            # Attribuer une portion des tâches à chaque employé (distribution simulée)
+            # Prendre un poste aléatoire ou le premier disponible
+            if poste_stats:
+                sample_poste = list(poste_stats.keys())[emp_counter % len(poste_stats)]
+                stats = poste_stats[sample_poste]
+                
+                # Diviser les tâches du poste entre les employés
+                tasks_portion = max(1, stats['tasksCount'] // len(erp_employees))
+                time_portion = stats['totalTime'] / len(erp_employees)
+                delays_portion = max(0, stats['delays'] // len(erp_employees))
+                
+                employees.append({
+                    'id': emp_data['id'],
+                    'name': emp_data['name'],
+                    'experience': emp_data['experience'],
+                    'postes': [sample_poste],
+                    'pieces': list(list(stats['pieces'])[:3]),  # Limiter à 3 pièces
+                    'tasks': stats['tasks'][:5],  # Limiter à 5 dernières tâches
+                    'totalTime': round(time_portion, 2),
+                    'delays': delays_portion,
+                    'tasksCount': tasks_portion,
+                    'avgTimePerTask': round(time_portion / tasks_portion, 2) if tasks_portion > 0 else 0,
+                    'delayRate': round((delays_portion / tasks_portion) * 100, 2) if tasks_portion > 0 else 0
+                })
+                emp_counter += 1
+        
+        total_tasks = sum(e['tasksCount'] for e in employees)
+        
+        return {
+            'employees': employees,
+            'totalEmployees': len(employees),
+            'avgTasksPerEmployee': round(total_tasks / len(employees), 1) if employees else 0,
+            'totalTasks': total_tasks
+        }
